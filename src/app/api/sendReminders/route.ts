@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import admin from "firebase-admin";
+import twilio from "twilio";
 
+// Initialize Firebase Admin (same as before)
 if (!admin.apps.length) {
   try {
     const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
@@ -23,6 +25,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+// Email Transporter (same as before)
 const transporter = nodemailer.createTransport({
   service: "gmail", 
   auth: {
@@ -30,6 +33,12 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
+
+// Twilio SMS Client
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID, 
+  process.env.TWILIO_AUTH_TOKEN
+);
 
 const sendReminders = async () => {
   try {
@@ -78,7 +87,7 @@ const sendReminders = async () => {
       return { success: true, message: "No new reminders needed." };
     }
 
-    const emailPromises = [];
+    const notificationPromises = [];
     
     for (const { id: taskId, data: task } of tasksToProcess) {
       console.log(`🔄 Processing Task: ${task.text} (UserID: ${task.userId})`);
@@ -90,8 +99,12 @@ const sendReminders = async () => {
         continue;
       }
 
-      const userEmail = userDoc.docs[0].data().email;
+      const userData = userDoc.docs[0].data();
+      const userEmail = userData.email;
+      const userPhone = userData.phoneNumber; // Assuming you store phone number in the user document
+
       console.log(`📧 Found User Email: ${userEmail} for UserID: ${task.userId}`);
+      console.log(`📱 Found User Phone: ${userPhone} for UserID: ${task.userId}`);
 
       const formattedDate = new Date(task.deadline.seconds * 1000).toLocaleString('en-US', { 
         timeZone: 'Asia/Kolkata',
@@ -102,6 +115,7 @@ const sendReminders = async () => {
         minute: '2-digit'
       });
 
+      // Email Notification
       const mailOptions = {
         from: `"Task Reminder" <${process.env.EMAIL_USER}>`,
         to: userEmail,
@@ -132,28 +146,42 @@ const sendReminders = async () => {
         text: `Reminder: Your task "${task.text}" is due at ${formattedDate}.\n\nDon't forget to complete it!`,
       };
 
-      emailPromises.push(
-        transporter
-          .sendMail(mailOptions)
-          .then(async () => {
+      // SMS Notification
+      const smsMessage = `Reminder: Your task "${task.text}" is due at ${formattedDate}. Don't forget to complete it!`;
+
+      notificationPromises.push(
+        Promise.all([
+          // Send Email
+          transporter.sendMail(mailOptions).then(() => {
             console.log(`✅ Email sent to ${userEmail} for task ${taskId}`);
-            
-            await db.collection("todos").doc(taskId).update({
-              reminderSent: true
-            });
-            
-            console.log(`✓ Task ${taskId} marked as reminded`);
-          })
-          .catch((error: any) => {
+          }).catch((error) => {
             console.error(`❌ Email failed for ${userEmail}:`, error);
-            return Promise.reject(error);
+          }),
+
+          // Send SMS
+          twilioClient.messages.create({
+            body: smsMessage,
+            from: process.env.TWILIO_PHONE_NUMBER, // Your Twilio phone number
+            to: userPhone // User's phone number
+          }).then(() => {
+            console.log(`✅ SMS sent to ${userPhone} for task ${taskId}`);
+          }).catch((error) => {
+            console.error(`❌ SMS failed for ${userPhone}:`, error);
           })
+        ])
+        .then(async () => {
+          // Mark task as reminded only if both notifications are sent successfully
+          await db.collection("todos").doc(taskId).update({
+            reminderSent: true
+          });
+          console.log(`✓ Task ${taskId} marked as reminded`);
+        })
       );
     }
 
-    await Promise.allSettled(emailPromises);
+    await Promise.allSettled(notificationPromises);
 
-    const sentCount = emailPromises.length;
+    const sentCount = notificationPromises.length;
     
     return { 
       success: true, 

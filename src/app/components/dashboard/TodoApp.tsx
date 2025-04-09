@@ -22,7 +22,6 @@ import TodoList from "./TodoList";
 import EmptyState from "./EmptyState";
 import LoginPage from "./Login";
 
-// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyB_1C1kD02UmLi4wgf02bkigve2Xtg5kn0",
   authDomain: "taskx-f8b52.firebaseapp.com",
