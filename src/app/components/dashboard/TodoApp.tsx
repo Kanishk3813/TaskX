@@ -67,7 +67,7 @@ const TodoApp: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
-
+  
     const q = query(
       collection(firestore, "todos"),
       where("userId", "==", user.uid)
@@ -90,15 +90,15 @@ const TodoApp: React.FC = () => {
             ? new Date(data.deadline.seconds * 1000)
             : undefined,
           recurring: data.recurring || undefined,
-          completedAt: data.completedAt
-            ? new Date(data.completedAt.seconds * 1000)
+          completedAt: data.completedAt 
+            ? new Date(data.completedAt.seconds * 1000) 
             : undefined,
         } as Todo;
       });
-
+  
       setTodos(fetchedTodos);
     });
-
+  
     return () => unsubscribe();
   }, [user]);
 
@@ -174,24 +174,24 @@ const TodoApp: React.FC = () => {
 
   const handleToggleTodo = async (id: string): Promise<void> => {
     if (!user) return;
-
+  
     const todoRef = doc(firestore, "todos", id);
     const todoToUpdate = todos.find((todo) => todo.id === id);
-
+  
     if (todoToUpdate) {
       try {
         const newCompletedStatus = !todoToUpdate.completed;
-
+        
         const updateData: any = {
           completed: newCompletedStatus,
         };
-
+        
         if (newCompletedStatus) {
           updateData.completedAt = new Date();
         } else {
           updateData.completedAt = null;
         }
-
+        
         await updateDoc(todoRef, updateData);
       } catch (error) {
         console.error("Error toggling todo: ", error);
@@ -243,24 +243,12 @@ const TodoApp: React.FC = () => {
     return true;
   });
 
-  const handleEditTodo = async (id: string, updatedTodo: Partial<Todo>): Promise<void> => {
+  const handleEditTodo = async (id: string, newText: string): Promise<void> => {
     if (!user) return;
-  
+
     const todoRef = doc(firestore, "todos", id);
-    
-    const cleanUpdate = Object.entries(updatedTodo).reduce((acc, [key, value]) => {
-      if (value !== undefined) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {} as Record<string, any>);
-    
-    if (cleanUpdate.project === '') {
-      cleanUpdate.project = null; 
-    }
-    
     try {
-      await updateDoc(todoRef, cleanUpdate);
+      await updateDoc(todoRef, { text: newText });
     } catch (error) {
       console.error("Error updating todo: ", error);
     }
@@ -336,7 +324,6 @@ const TodoApp: React.FC = () => {
                 handleDeleteTodo={handleDeleteTodo}
                 handleUpdatePriority={handleUpdatePriority}
                 handleUpdateProject={handleUpdateProject}
-                handleEditTodo={handleEditTodo}
               />
             ) : (
               <EmptyState />

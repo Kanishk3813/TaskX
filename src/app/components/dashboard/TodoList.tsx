@@ -9,7 +9,7 @@ interface TodoListProps {
   handleDeleteTodo: (id: string) => void | Promise<void>;
   handleUpdatePriority: (id: string, priority: number) => void | Promise<void>;
   handleUpdateProject: (id: string, project: string) => void | Promise<void>;
-  handleEditTodo?: (id: string, updatedTodo: Partial<Todo>) => void | Promise<void>;
+  handleEditTodo?: (id: string, text: string) => void | Promise<void>;
 }
 
 const TodoList: React.FC<TodoListProps> = ({ 

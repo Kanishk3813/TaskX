@@ -8,7 +8,7 @@ interface TodoItemProps {
   handleDeleteTodo: (id: string) => void | Promise<void>;
   handleUpdatePriority?: (id: string, priority: number) => void | Promise<void>;
   handleUpdateProject?: (id: string, project: string) => void | Promise<void>;
-  handleEditTodo?: (id: string, updatedTodo: Partial<Todo>) => void | Promise<void>;
+  handleEditTodo?: (id: string, text: string) => void | Promise<void>;
 }
 
 const TodoItem: React.FC<TodoItemProps> = ({ 
@@ -22,11 +22,6 @@ const TodoItem: React.FC<TodoItemProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(todo.text);
-  const [editDeadline, setEditDeadline] = useState<string>(
-    todo.deadline ? todo.deadline.toISOString().slice(0, 16) : ''
-  );
-  const [editPriority, setEditPriority] = useState(todo.priority);
-  const [editProject, setEditProject] = useState(todo.project || '');
   
   const formatDeadline = (date: Date) => {
     const today = new Date();
@@ -71,33 +66,13 @@ const TodoItem: React.FC<TodoItemProps> = ({
 
   const handleSaveEdit = () => {
     if (editText.trim() !== '' && handleEditTodo) {
-      const updatedTodo: Partial<Todo> = {
-        text: editText,
-        priority: editPriority
-      };
-      
-      if (editProject && editProject.trim() !== '') {
-        updatedTodo.project = editProject;
-      } else {
-        updatedTodo.project = undefined; 
-      }
-      
-      if (editDeadline) {
-        updatedTodo.deadline = new Date(editDeadline);
-      } else {
-        updatedTodo.deadline = undefined;
-      }
-      
-      handleEditTodo(todo.id, updatedTodo);
+      handleEditTodo(todo.id, editText);
       setIsEditing(false);
     }
   };
 
   const handleCancelEdit = () => {
     setEditText(todo.text);
-    setEditDeadline(todo.deadline ? todo.deadline.toISOString().slice(0, 16) : '');
-    setEditPriority(todo.priority);
-    setEditProject(todo.project || '');
     setIsEditing(false);
   };
 
@@ -196,84 +171,28 @@ const TodoItem: React.FC<TodoItemProps> = ({
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {/* Task text edit */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-400">Task:</label>
-            <input
-              type="text"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              className="flex-grow p-2 bg-gray-700/50 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              autoFocus
-            />
-          </div>
-          
-          {/* Deadline edit */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-400">Deadline:</label>
-            <input
-              type="datetime-local"
-              value={editDeadline}
-              onChange={(e) => setEditDeadline(e.target.value)}
-              className="flex-grow p-2 bg-gray-700/50 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            {editDeadline && (
-              <button 
-                onClick={() => setEditDeadline('')}
-                className="p-1 text-gray-400 hover:text-red-400 transition-colors rounded-full hover:bg-red-500/10"
-                title="Clear deadline"
-              >
-                <X size={16} />
-              </button>
-            )}
-          </div>
-          
-          {/* Priority edit */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-400">Priority:</label>
-            <select
-              value={editPriority}
-              onChange={(e) => setEditPriority(Number(e.target.value))}
-              className="p-2 bg-gray-700/50 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="1">High</option>
-              <option value="2">Medium</option>
-              <option value="3">Low</option>
-              <option value="4">None</option>
-            </select>
-          </div>
-          
-          {/* Project edit */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-400">Project:</label>
-            <input
-              type="text"
-              value={editProject}
-              onChange={(e) => setEditProject(e.target.value)}
-              placeholder="Enter project name"
-              className="flex-grow p-2 bg-gray-700/50 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          
-          {/* Action buttons */}
-          <div className="flex justify-end gap-2 mt-2">
-            <button 
-              onClick={handleCancelEdit}
-              className="px-3 py-1 text-gray-400 hover:text-gray-300 transition-colors bg-gray-700/50 hover:bg-gray-700 rounded-md"
-              title="Cancel editing"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={handleSaveEdit}
-              className="px-3 py-1 text-green-400 hover:text-green-300 transition-colors bg-green-700/20 hover:bg-green-700/40 rounded-md flex items-center gap-1"
-              title="Save changes"
-            >
-              <Save size={16} />
-              Save
-            </button>
-          </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            className="flex-grow p-2 bg-gray-700/50 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            autoFocus
+          />
+          <button 
+            onClick={handleSaveEdit}
+            className="p-2 text-green-400 hover:text-green-300 transition-colors"
+            title="Save changes"
+          >
+            <Save size={16} />
+          </button>
+          <button
+            onClick={handleCancelEdit}
+            className="p-2 text-gray-400 hover:text-red-400 transition-colors"
+            title="Cancel editing"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
     </li>
