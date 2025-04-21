@@ -11,6 +11,7 @@ import {
   deleteDoc,
   doc,
   updateDoc,
+  getDoc,
 } from "firebase/firestore";
 import { initializeApp } from "firebase/app";
 
@@ -21,6 +22,8 @@ import TodoInput from "./TodoInput";
 import TodoList from "./TodoList";
 import EmptyState from "./EmptyState";
 import LoginPage from "./Login";
+import ProfilePage from "./profile"; // Import the ProfilePage component
+import StatsPage from "./statspage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB_1C1kD02UmLi4wgf02bkigve2Xtg5kn0",
@@ -45,6 +48,8 @@ const TodoApp: React.FC = () => {
   const [onLoginPage, setOnLoginPage] = useState(false);
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [showTaskInput, setShowTaskInput] = useState<boolean>(false);
+  const [showProfilePage, setShowProfilePage] = useState<boolean>(false);
+  const [showStatsPage, setShowStatsPage] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -93,12 +98,99 @@ const TodoApp: React.FC = () => {
           completedAt: data.completedAt 
             ? new Date(data.completedAt.seconds * 1000) 
             : undefined,
+          calendarEventId: data.calendarEventId || undefined,
         } as Todo;
       });
   
       setTodos(fetchedTodos);
     });
   
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleNavigateToStats = () => {
+    setShowStatsPage(true);
+  };
+
+  const handleBackFromStats = () => {
+    setShowStatsPage(false);
+  };
+
+  const syncWithGoogleCalendar = async (todo: Todo): Promise<void> => {
+    if (!user || !todo.deadline) return;
+    
+    try {
+      const idToken = await user.getIdToken();
+      
+      const response = await fetch('/api/sync-calendar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          todoId: todo.id,
+          text: todo.text,
+          deadline: todo.deadline.toISOString(),
+          calendarEventId: todo.calendarEventId
+        })
+      });
+      
+      // Check if the response is JSON before trying to parse it
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const data = await response.json();
+        
+        if (!response.ok) {
+          if (data.needsIntegration) {
+            console.log('Google Calendar integration needed');
+            // You might want to prompt the user to integrate here
+            return;
+          }
+          
+          throw new Error(data.error || 'Failed to sync with Google Calendar');
+        }
+        
+        if (data.eventId && !todo.calendarEventId) {
+          await updateDoc(doc(firestore, "todos", todo.id), {
+            calendarEventId: data.eventId
+          });
+        }
+      } else {
+        // Handle non-JSON responses
+        console.error('Received non-JSON response from API');
+        const textResponse = await response.text();
+        console.error('Response content:', textResponse.substring(0, 100) + '...');
+      }
+    } catch (error) {
+      console.error('Calendar sync error:', error);
+      // Don't throw the error to prevent app crash
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(firestore, "todos"),
+      where("userId", "==", user.uid)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if ((change.type === 'added' || change.type === 'modified') && change.doc.data().deadline) {
+          const todoData = change.doc.data();
+          const todo = {
+            ...todoData,
+            id: change.doc.id,
+            deadline: todoData.deadline ? new Date(todoData.deadline.seconds * 1000) : undefined
+          } as Todo;
+          
+          await syncWithGoogleCalendar(todo);
+        }
+      });
+    });
+
     return () => unsubscribe();
   }, [user]);
 
@@ -201,12 +293,56 @@ const TodoApp: React.FC = () => {
 
   const handleDeleteTodo = async (id: string): Promise<void> => {
     if (!user) return;
-
+  
     try {
+      // First, delete from Google Calendar if there's an associated event
+      const todoToDelete = todos.find(todo => todo.id === id);
+      if (todoToDelete?.calendarEventId) {
+        try {
+          const idToken = await user.getIdToken();
+          const response = await fetch('/api/delete-calendar-event', {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              eventId: todoToDelete.calendarEventId
+            })
+          });
+          
+          // Check if the response is JSON before trying to parse it
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.indexOf("application/json") !== -1) {
+            const data = await response.json();
+            if (!response.ok) {
+              console.error('Error deleting calendar event:', data.error);
+            }
+          } else {
+            // Handle non-JSON responses
+            console.error('Received non-JSON response from API');
+            const textResponse = await response.text();
+            console.error('Response content:', textResponse.substring(0, 100) + '...');
+          }
+        } catch (error) {
+          console.error('Error deleting calendar event:', error);
+          // Continue with todo deletion even if calendar event deletion fails
+        }
+      }
+      
+      // Then delete the todo
       await deleteDoc(doc(firestore, "todos", id));
     } catch (error) {
-      console.error("Error deleting todo: ", error);
+      console.error("Error deleting todo:", error);
     }
+  };
+
+  const handleNavigateToProfile = () => {
+    setShowProfilePage(true);
+  };
+
+  const handleBackFromProfile = () => {
+    setShowProfilePage(false);
   };
 
   const isToday = (date: Date): boolean => {
@@ -258,6 +394,40 @@ const TodoApp: React.FC = () => {
     return <LoginPage />;
   }
 
+  if (showProfilePage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black">
+        <TodoHeader
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+          user={user}
+          onLoginPage={onLoginPage}
+          setOnLoginPage={setOnLoginPage}
+          onNavigateToProfile={handleNavigateToProfile}
+          onNavigateToStats={handleNavigateToStats}
+        />
+        <ProfilePage onBack={handleBackFromProfile} />
+      </div>
+    );
+  }
+
+  if (showStatsPage) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black">
+        <TodoHeader
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+          user={user}
+          onLoginPage={onLoginPage}
+          setOnLoginPage={setOnLoginPage}
+          onNavigateToProfile={handleNavigateToProfile}
+          onNavigateToStats={handleNavigateToStats}
+        />
+        <StatsPage onBack={handleBackFromStats} user={user} />
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-black via-gray-900 to-black text-white overflow-hidden">
       <div className="absolute -top-1/4 -right-1/4 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl animate-pulse"></div>
@@ -269,6 +439,8 @@ const TodoApp: React.FC = () => {
         user={user}
         onLoginPage={onLoginPage}
         setOnLoginPage={setOnLoginPage}
+        onNavigateToProfile={handleNavigateToProfile}
+        onNavigateToStats={handleNavigateToStats}
       />
 
       <div className="relative z-10 flex">

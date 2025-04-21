@@ -9,5 +9,6 @@ export interface Todo {
   deadline?: Date;
   recurring?: string;
   completedAt?: Date;
+  calendarEventId?: string;
 }
 export type ViewType = 'inbox' | 'today' | 'important' | 'completed' | 'upcoming' | string;
