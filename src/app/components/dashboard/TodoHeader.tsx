@@ -40,7 +40,7 @@ const IntegrateModal = ({ onClose }: { onClose: () => void }) => {
       }
 
       const clientId = '787997712321-mhs1p67s3djkq3nap4nr91lnjbiojvu7.apps.googleusercontent.com';
-      const redirectUri = `${window.location.origin}/api/integrate`;
+      const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrate`;
       const state = user.uid;
       
       const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar');
