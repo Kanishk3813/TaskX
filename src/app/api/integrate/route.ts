@@ -65,9 +65,18 @@ export async function GET(request: NextRequest) {
       `${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=success`
     );
   } catch (error) {
-    console.error('Integration error:', error);
+    if (error instanceof Error) {
+      console.error('Integration error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        code: (error as any).code  
+      });
+    } else {
+      console.error('Unknown error occurred:', error);
+    }
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=error`
+      `${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=error&reason=${encodeURIComponent((error as Error).message)}`
     );
   }
 }
