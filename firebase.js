@@ -2,15 +2,21 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 
+// Firebase configuration using Next.js environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyB_1C1kD02UmLi4wgf02bkigve2Xtg5kn0",
-  authDomain: "taskx-f8b52.firebaseapp.com",
-  projectId: "taskx-f8b52",
-  storageBucket: "taskx-f8b52.firebasestorage.app",
-  messagingSenderId: "787997712321",
-  appId: "1:787997712321:web:d4aef7955262fc19b3d940",
-  measurementId: "G-3WHTR3E4VQ"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+
+// Only initialize analytics on the client side
+const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+export { app, analytics };
