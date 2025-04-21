@@ -1,41 +1,44 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import { initFirebaseAdmin } from '../../../utils/firebaseAdmin';
 
-// Initialize Firebase Admin
 initFirebaseAdmin();
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { code, state } = req.query;
-  const uid = state as string; // We'll pass user ID in state parameter
-
-  if (!code || !uid) {
-    return res.status(400).json({ error: 'Missing code or user ID' });
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  
+  if (!code) {
+    return NextResponse.json({ error: 'Missing authorization code' }, { status: 400 });
   }
 
   try {
+    let uid;
+    if (state) {
+      uid = state;
+    } else {
+      return NextResponse.json({ error: 'Missing user identification' }, { status: 400 });
+    }
+
     // Set up OAuth2 client
     const oauth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/integrate`
     );
 
-    // Exchange code for tokens
-    const { tokens } = await oauth2Client.getToken(code as string);
+    const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // Create calendar service
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-    // Create a new calendar for the app or use an existing one
+    const calendarsResponse = await calendar.calendarList.list();
     let calendarId;
     
-    // First check if the user already has a TaskX calendar
-    const calendarsResponse = await calendar.calendarList.list();
     const existingCalendar = calendarsResponse.data.items?.find(
       cal => cal.summary === 'TaskX Events'
     );
@@ -43,7 +46,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (existingCalendar && existingCalendar.id) {
       calendarId = existingCalendar.id;
     } else {
-      // Create a new calendar
       const calendarRes = await calendar.calendars.insert({
         requestBody: {
           summary: 'TaskX Events',
@@ -53,17 +55,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       calendarId = calendarRes.data.id;
     }
 
-    // Save tokens and calendar ID to Firestore
     const db = getFirestore();
     await db.collection('users').doc(uid).set({
       googleTokens: tokens,
       googleCalendarId: calendarId
     }, { merge: true });
 
-    // Redirect back to app
-    res.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=success`);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=success`
+    );
   } catch (error) {
     console.error('Integration error:', error);
-    res.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=error`);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL || ''}/?integration=error`
+    );
   }
 }

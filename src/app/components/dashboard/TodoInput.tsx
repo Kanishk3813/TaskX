@@ -38,6 +38,7 @@ const TodoInput: React.FC<TodoInputProps> = ({
   const [inputValue, setInputValue] = useState("");
   const [parsedPreview, setParsedPreview] = useState<ParsedPreview | null>(null);
   const [nlpEnabled, setNlpEnabled] = useState(true);
+  const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);

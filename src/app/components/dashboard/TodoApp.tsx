@@ -116,57 +116,71 @@ const TodoApp: React.FC = () => {
     setShowStatsPage(false);
   };
 
-  const syncWithGoogleCalendar = async (todo: Todo): Promise<void> => {
-    if (!user || !todo.deadline) return;
+const syncWithGoogleCalendar = async (todo: Todo): Promise<void> => {
+  if (!user || !todo.deadline) return;
+  
+  try {
+    const userDocRef = doc(firestore, "users", user.uid);
+    const userDoc = await getDoc(userDocRef);
     
-    try {
-      const idToken = await user.getIdToken();
-      
-      const response = await fetch('/api/sync-calendar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          todoId: todo.id,
-          text: todo.text,
-          deadline: todo.deadline.toISOString(),
-          calendarEventId: todo.calendarEventId
-        })
-      });
-      
-      // Check if the response is JSON before trying to parse it
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.indexOf("application/json") !== -1) {
-        const data = await response.json();
-        
-        if (!response.ok) {
-          if (data.needsIntegration) {
-            console.log('Google Calendar integration needed');
-            // You might want to prompt the user to integrate here
-            return;
-          }
-          
-          throw new Error(data.error || 'Failed to sync with Google Calendar');
-        }
-        
-        if (data.eventId && !todo.calendarEventId) {
-          await updateDoc(doc(firestore, "todos", todo.id), {
-            calendarEventId: data.eventId
-          });
-        }
-      } else {
-        // Handle non-JSON responses
-        console.error('Received non-JSON response from API');
-        const textResponse = await response.text();
-        console.error('Response content:', textResponse.substring(0, 100) + '...');
-      }
-    } catch (error) {
-      console.error('Calendar sync error:', error);
-      // Don't throw the error to prevent app crash
+    if (!userDoc.exists() || !userDoc.data().googleTokens) {
+      console.log('Google Calendar not connected. Skipping sync.');
+      return;
     }
-  };
+    
+    const idToken = await user.getIdToken();
+    
+    const response = await fetch('/api/sync-calendar', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        todoId: todo.id,
+        text: todo.text,
+        deadline: todo.deadline.toISOString(),
+        calendarEventId: todo.calendarEventId
+      })
+    });
+    
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type");
+      
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const errorData = await response.json();
+        
+        if (errorData.needsIntegration) {
+          console.log('Google Calendar integration needed');
+          return;
+        }
+        
+        throw new Error(errorData.error || 'Failed to sync with Google Calendar');
+      } else {
+        throw new Error(`Server error: ${response.status}`);
+      }
+    }
+    
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+      const data = await response.json();
+      
+      if (data.eventId && !todo.calendarEventId) {
+        console.log("Successfully created calendar event:", data.eventId);
+        await updateDoc(doc(firestore, "todos", todo.id), {
+          calendarEventId: data.eventId
+        });
+      }
+    } else {
+      console.error('Received non-JSON response from API');
+      const textResponse = await response.text();
+      console.error('Response content:', textResponse.substring(0, 100) + '...');
+      throw new Error('Invalid response format');
+    }
+  } catch (error) {
+    console.error('Calendar sync error:', error);
+  }
+};
 
   useEffect(() => {
     if (!user) return;
@@ -202,12 +216,12 @@ const TodoApp: React.FC = () => {
     priority: number = 4
   ): Promise<void> => {
     if (taskTitle.trim() === "" || !user) return;
-
+  
     let todoProject = project;
     if (!todoProject && activeProject) {
       todoProject = activeProject;
     }
-
+  
     const newTodo: any = {
       text: taskTitle.trim(),
       completed: false,
@@ -215,22 +229,42 @@ const TodoApp: React.FC = () => {
       priority: priority,
       userId: user.uid,
     };
-
+  
     if (todoProject) {
       newTodo.project = todoProject;
     }
-
+  
     if (deadline) {
       newTodo.deadline = new Date(deadline);
     }
-
+  
     if (recurring) {
       newTodo.recurring = recurring;
     }
-
+  
     try {
-      await addDoc(collection(firestore, "todos"), newTodo);
+      // Add the todo to Firestore
+      const docRef = await addDoc(collection(firestore, "todos"), newTodo);
       setInputValue("");
+      
+      // Sync with Google Calendar if there's a deadline
+      if (deadline) {
+        // Create a todo object with the new ID for syncing
+        const todoForSync: Todo = {
+          id: docRef.id,
+          text: newTodo.text,
+          completed: newTodo.completed,
+          createdAt: newTodo.createdAt,
+          priority: newTodo.priority,
+          userId: newTodo.userId,
+          project: newTodo.project,
+          deadline: newTodo.deadline,
+          recurring: newTodo.recurring
+        };
+        
+        // Sync with Google Calendar
+        await syncWithGoogleCalendar(todoForSync);
+      }
     } catch (error) {
       console.error("Error adding todo: ", error);
     }
