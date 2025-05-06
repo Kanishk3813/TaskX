@@ -18,6 +18,7 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
+import { FcGoogle } from "react-icons/fc";
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -395,11 +396,7 @@ const LoginPage: React.FC = () => {
              onClick={handleGoogleSignIn}
              className="w-full p-3 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors flex items-center justify-center group"
            >
-             <img 
-               src="/api/placeholder/24/24" 
-               alt="Google Logo" 
-               className="mr-2 w-5 h-5 group-hover:scale-110 transition-transform" 
-             />
+             <FcGoogle className="mr-2 w-5 h-5 group-hover:scale-110 transition-transform" />
              Continue with Google
            </button>
          </div>
