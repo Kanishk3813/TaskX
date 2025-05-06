@@ -1,3 +1,4 @@
+//src\app\components\dashboard\profile.tsx
 import React, { useState, useEffect } from 'react';
 import { getAuth, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -6,11 +7,26 @@ import { User, Phone, Mail, Bell, ArrowLeft, Save, Lock, Eye, EyeOff, ChevronDow
 interface NotificationPreferences {
   notificationType: 'email' | 'mobile' | 'both';
   phoneNumber?: string;
+  countryCode?: string;
 }
 
 interface ProfilePageProps {
   onBack?: () => void;
 }
+
+const countryCodes = [
+  { code: '+91', country: 'India' },
+  { code: '+1', country: 'USA/Canada' },
+  { code: '+44', country: 'UK' },
+  { code: '+61', country: 'Australia' },
+  { code: '+65', country: 'Singapore' },
+  { code: '+971', country: 'UAE' },
+  { code: '+966', country: 'Saudi Arabia' },
+  { code: '+49', country: 'Germany' },
+  { code: '+33', country: 'France' },
+  { code: '+86', country: 'China' },
+  { code: '+81', country: 'Japan' },
+];
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   const auth = getAuth();
@@ -22,14 +38,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   const [saving, setSaving] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>({
     notificationType: 'email',
-    phoneNumber: ''
+    phoneNumber: '',
+    countryCode: '+91'
   });
   const [profileData, setProfileData] = useState({
     displayName: '',
     username: '',
   });
   
-  // Password change states
+  const [showCountryCodes, setShowCountryCodes] = useState(false);
+  
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -39,7 +57,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // Section visibility states
   const [showProfileSection, setShowProfileSection] = useState(true);
   const [showNotificationSection, setShowNotificationSection] = useState(true);
   const [showPasswordChangeSection, setShowPasswordChangeSection] = useState(true);
@@ -60,13 +77,38 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
               username: data.username || '',
             });
             
-            // Set notification preferences
+            let countryCode = '+91'; 
+            let phoneNumber = '';
+            
+            if (data.phoneNumber) {
+              if (data.phoneNumber.startsWith('+')) {
+                const foundCode = countryCodes.find(cc => 
+                  data.phoneNumber.startsWith(cc.code)
+                );
+                
+                if (foundCode) {
+                  countryCode = foundCode.code;
+                  phoneNumber = data.phoneNumber.substring(foundCode.code.length);
+                } else {
+                  const match = data.phoneNumber.match(/^\+(\d+)/);
+                  if (match && match[0]) {
+                    countryCode = match[0];
+                    phoneNumber = data.phoneNumber.substring(match[0].length);
+                  } else {
+                    phoneNumber = data.phoneNumber;
+                  }
+                }
+              } else {
+                phoneNumber = data.phoneNumber;
+              }
+            }
+            
             setNotificationPrefs({
               notificationType: data.notificationType || 'email',
-              phoneNumber: data.phoneNumber || ''
+              phoneNumber: phoneNumber,
+              countryCode: countryCode
             });
           } else {
-            // Initialize with Firebase auth data if no Firestore data exists
             setProfileData({
               displayName: user.displayName || '',
               username: '',
@@ -86,12 +128,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   const handleSaveProfile = async () => {
     if (!user) return;
 
-    // Validate phone number if mobile or both notifications are selected
     if ((notificationPrefs.notificationType === 'mobile' || notificationPrefs.notificationType === 'both') 
-        && (!notificationPrefs.phoneNumber || notificationPrefs.phoneNumber.length < 10)) {
+        && (!notificationPrefs.phoneNumber || notificationPrefs.phoneNumber.length < 8)) {
       showNotification('Please enter a valid phone number', 'error');
       return;
     }
+
+    const fullPhoneNumber = notificationPrefs.phoneNumber ? 
+      `${notificationPrefs.countryCode}${notificationPrefs.phoneNumber}` : '';
 
     try {
       setSaving(true);
@@ -100,7 +144,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
         displayName: profileData.displayName,
         username: profileData.username,
         notificationType: notificationPrefs.notificationType,
-        phoneNumber: notificationPrefs.phoneNumber || null
+        phoneNumber: fullPhoneNumber || null
       });
 
       showNotification('Profile updated successfully!', 'success');
@@ -135,13 +179,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
     notification.style.opacity = '0';
     notification.style.transition = 'all 0.3s ease';
     
-    // Show notification
     setTimeout(() => {
       notification.style.transform = 'translateY(0)';
       notification.style.opacity = '1';
     }, 10);
     
-    // Remove notification after 3 seconds
     setTimeout(() => {
       notification.style.transform = 'translateY(20px)';
       notification.style.opacity = '0';
@@ -150,11 +192,19 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   };
 
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, ''); // Remove non-digit characters
+    const value = e.target.value.replace(/\D/g, ''); 
     setNotificationPrefs(prev => ({
       ...prev,
       phoneNumber: value
     }));
+  };
+
+  const handleCountryCodeSelect = (code: string) => {
+    setNotificationPrefs(prev => ({
+      ...prev,
+      countryCode: code
+    }));
+    setShowCountryCodes(false);
   };
 
   const handlePasswordChange = async () => {
@@ -162,8 +212,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
     
     setPasswordError('');
     setPasswordSuccess('');
-    
-    // Validate passwords
+
     if (!currentPassword) {
       setPasswordError('Current password is required');
       return;
@@ -180,24 +229,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
     }
     
     try {
-      // Reauthenticate user
       const credential = EmailAuthProvider.credential(
         user.email || '',
         currentPassword
       );
       
       await reauthenticateWithCredential(user, credential);
-      
-      // Update password
+
       await updatePassword(user, newPassword);
       
-      // Clear fields and show success
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setPasswordSuccess('Password updated successfully');
       
-      // Close password section after success
       setTimeout(() => {
         setShowPasswordSection(false);
         setPasswordSuccess('');
@@ -212,6 +257,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
       }
     }
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showCountryCodes && !target.closest('.country-code-dropdown')) {
+        setShowCountryCodes(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCountryCodes]);
 
   if (!user) {
     return (
@@ -485,15 +544,52 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
                 notificationPrefs.notificationType === 'both') && (
                 <div className="mt-4">
                   <label className="block text-sm text-gray-400 mb-2">Phone Number</label>
-                  <input 
-                    type="tel" 
-                    value={notificationPrefs.phoneNumber}
-                    onChange={handlePhoneNumberChange}
-                    className="w-full bg-gray-800/70 text-white rounded-lg p-3 border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
-                    placeholder="Enter your phone number"
-                  />
+                  
+                  {/* Country code selector with phone number input */}
+                  <div className="flex space-x-2">
+                    {/* Country code dropdown */}
+                    <div className="relative country-code-dropdown">
+                      <button
+                        type="button"
+                        onClick={() => setShowCountryCodes(!showCountryCodes)}
+                        className="bg-gray-800/70 text-white h-12 px-3 rounded-lg flex items-center justify-center min-w-24 border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                      >
+                        <span>{notificationPrefs.countryCode}</span>
+                        <ChevronDown size={16} className="ml-2 text-gray-400" />
+                      </button>
+                      
+                      {/* Country code dropdown menu */}
+                      {showCountryCodes && (
+                        <div className="absolute z-10 mt-1 bg-gray-800 shadow-lg rounded-lg w-64 max-h-60 overflow-y-auto">
+                          {countryCodes.map((country) => (
+                            <button
+                              key={country.code}
+                              type="button"
+                              onClick={() => handleCountryCodeSelect(country.code)}
+                              className={`w-full px-4 py-2 text-left hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                notificationPrefs.countryCode === country.code ? 'bg-blue-500/20 text-blue-400' : 'text-white'
+                              }`}
+                            >
+                              <span>{country.country}</span>
+                              <span className="text-gray-400">{country.code}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Phone number input */}
+                    <input 
+                      type="tel" 
+                      value={notificationPrefs.phoneNumber}
+                      onChange={handlePhoneNumberChange}
+                      className="flex-1 bg-gray-800/70 text-white rounded-lg p-3 border-0 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                      placeholder="Phone number"
+                    />
+                  </div>
+                  
                   <p className="mt-2 text-sm text-gray-500">
-                    Format: Country code followed by number (e.g., 16175551234)
+                    Enter your phone number without any spaces or dashes. Example for India: 9XXXXXXXXX
                   </p>
                 </div>
               )}
